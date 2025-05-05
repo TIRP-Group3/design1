@@ -4,3 +4,5 @@ numpy
 pandas
 scikit-learn
 python-multipart
+sqlalchemy
+mysql-connector-python
