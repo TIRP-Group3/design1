@@ -1,25 +1,27 @@
-import { useState, useEffect } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-import axios from 'axios';
-import Test from './Test.jsx';
+// frontend/src/App.jsx
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Home from "./pages/Home"; 
+import "./App.css"; 
+import ProtectedRoute from "./pages/ProtectedRoute";
+
 function App() {
-    // const [message, setMessage] = useState(0)
-    // useEffect(() => {
-    //         const fetchMessage = async () => {
-    //         const response = await axios.get('http://127.0.0.1:8000/');
-    //         setMessage(response.data.message);
-    //         };
-    //         fetchMessage();
-    // }, []);
-return (
-        <>
-            <div className="App">
-                <Test />
-            </div>
-        </>
-    )
+  return (
+    <Router>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* Protected Routes */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/" element={<Home />} />
+        </Route>
+      </Routes>
+    </Router>
+  );
 }
 
-export default App
+export default App;
