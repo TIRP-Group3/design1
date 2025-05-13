@@ -19,7 +19,7 @@ const Home = () => {
   }, []);
 
   return (
-    <div>
+    <div className="centered">
       <h1>Welcome to the Home Page</h1>
       {user ? (
         <div>

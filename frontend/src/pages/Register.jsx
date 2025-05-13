@@ -22,7 +22,7 @@ function Register() {
   };
 
   return (
-    <div>
+    <div className="centered">
       <h2>Register</h2>
       <form onSubmit={handleRegister}>
         <input

@@ -22,7 +22,7 @@ function Login() {
   };
 
   return (
-    <div>
+    <div className="centered">
       <h2>Login</h2>
       <form onSubmit={handleLogin}>
         <input
