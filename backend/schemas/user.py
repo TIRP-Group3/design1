@@ -17,3 +17,10 @@ class UserShow(BaseModel):
 
     class Config:
         from_attributes = True
+
+class UserRole(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True

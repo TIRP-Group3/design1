@@ -4,6 +4,8 @@ from models.user import User
 from schemas.user import UserCreate, UserLogin, UserShow
 from utils.hash import hash_password, verify_password, create_access_token, decode_access_token
 from database import SessionLocal
+from models.role import Role
+
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -23,19 +25,28 @@ def get_token(authorization: str = Header(...)) -> str:
 
 @router.post("/register", response_model=UserShow)
 def register_user(request: UserCreate, db: Session = Depends(get_db)):
+    # Check if username is taken
     existing = db.query(User).filter(User.username == request.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username already taken")
 
+    # Fetch the default role
+    default_role = db.query(Role).filter(Role.name == "User").first()
+    if not default_role:
+        raise HTTPException(status_code=500, detail="Default role 'User' not found")
+
+    # Create new user with default role
     new_user = User(
         username=request.username,
         email=request.email,
-        password=hash_password(request.password)
+        password=hash_password(request.password),
+        role_id=default_role.id  # 👈 Assign default role
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
+
 
 @router.post("/login")
 def login_user(request: UserLogin, db: Session = Depends(get_db)):
