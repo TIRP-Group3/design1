@@ -56,7 +56,7 @@ def login_user(request: UserLogin, db: Session = Depends(get_db)):
 
     # Generate JWT token
     token = create_access_token(data={"sub": user.username})
-    return {"message": "Login successful", "token": token}
+    return {"message": "Login successful", "token": token,'user':user,'role':user.role.name}
 
 # Route to get current user's info, protected by JWT
 @router.get("/me", response_model=UserShow)

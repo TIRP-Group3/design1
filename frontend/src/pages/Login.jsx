@@ -15,8 +15,10 @@ function Login() {
       const response = await api.post("/users/login", { username, password });
       const { token } = response.data;
       localStorage.setItem("token", token);  // Save the token
+      localStorage.setItem("role", response.data.role); // Store the user role in localStorage
       navigate("/"); // Navigate to the home page after login
     } catch (error) {
+      console.log(error)
       setError("Invalid credentials");
     }
   };

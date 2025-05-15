@@ -13,3 +13,5 @@ class User(Base):
 
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=True)  # Foreign key to roles table
     role = relationship("Role", back_populates="users")  # Establishes relationship
+
+    predictions = relationship("PredictionHistory", back_populates="user", cascade="all, delete-orphan")

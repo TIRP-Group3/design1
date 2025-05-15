@@ -1,6 +1,13 @@
 # backend/schemas/user.py
 from pydantic import BaseModel, EmailStr
 
+class UserRole(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
@@ -14,13 +21,7 @@ class UserShow(BaseModel):
     id: int
     username: str
     email: EmailStr
-
-    class Config:
-        from_attributes = True
-
-class UserRole(BaseModel):
-    id: int
-    name: str
+    role: UserRole  
 
     class Config:
         from_attributes = True

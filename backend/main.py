@@ -2,7 +2,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import users
-from routers import file_upload
+from routers import trains
+from routers import predicts
 from database import Base, engine
 
 app = FastAPI()
@@ -26,4 +27,5 @@ def read_root():
 
 # Include routers for user and file upload
 app.include_router(users.router)
-app.include_router(file_upload.router)
+app.include_router(trains.router)
+app.include_router(predicts.router)
