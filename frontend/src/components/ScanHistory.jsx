@@ -19,7 +19,7 @@ const ScanHistory = ({ sessions }) => {
   return (
     <Box sx={{ mt: 6 }}>
       <Typography variant="h6" gutterBottom>
-        Scan History (Grouped by Session)
+        Scan History 
       </Typography>
 
       <TableContainer component={Paper}>

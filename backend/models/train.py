@@ -4,10 +4,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 import joblib
 import os
+from database import Base
 
-def train_model(df: pd.DataFrame):
+def train_model(df: pd.DataFrame, model_filename: str, encoder_filename: str):
     if 'target' not in df.columns:
         raise ValueError("CSV must contain a 'target' column.")
 
@@ -46,7 +50,19 @@ def train_model(df: pd.DataFrame):
 
     # Saving model and label encoders
     os.makedirs("saved_models", exist_ok=True)
-    joblib.dump(hybrid, "saved_models/hybrid_model.pkl")
-    joblib.dump(label_encoders, "saved_models/encoders.pkl")
+    joblib.dump(hybrid, f"saved_models/{model_filename}")
+    joblib.dump(label_encoders, f"saved_models/{encoder_filename}")
 
     return accuracy * 100  # Returning accuracy as percentage
+
+class TrainingSession(Base):
+    __tablename__ = "training_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String(255), nullable=False)
+    model_path = Column(String(255), nullable=False)
+    accuracy = Column(Float, nullable=False)
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    uploaded_by = Column(Integer, ForeignKey("users.id"))
+    
+    user = relationship("User", back_populates="training_sessions")

@@ -16,3 +16,5 @@ class User(Base):
 
     predictions = relationship("PredictionHistory", back_populates="user", cascade="all, delete-orphan")
     scan_sessions = relationship("ScanSession", back_populates="user", cascade="all, delete")
+    # models/user.py
+    training_sessions = relationship("TrainingSession", back_populates="user")

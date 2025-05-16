@@ -11,8 +11,8 @@ from models.predict import PredictionHistory
 from models.user import User
 from models.predict import ScanSession  # new import
 
-model = joblib.load("saved_models/hybrid_model.pkl")
-encoders = joblib.load("saved_models/encoders.pkl")
+from models.train import TrainingSession
+
 
 router = APIRouter(prefix="/datasets", tags=["Datasets"])
 
@@ -35,6 +35,17 @@ async def predict_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Get the latest training session
+    latest = db.query(TrainingSession).order_by(TrainingSession.uploaded_at.desc()).first()
+
+    if not latest:
+        raise HTTPException(status_code=404, detail="No trained model found.")
+
+    model = joblib.load(latest.model_path)
+    encoder_path = latest.model_path.replace("model_", "encoder_")
+    encoders = joblib.load(encoder_path)
+
+
     results = []
 
     # Create a scan session
