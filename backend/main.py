@@ -1,6 +1,7 @@
 # backend/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routers import dashboards
 from routers import users
 from routers import trains
 from routers import predicts
@@ -29,3 +30,4 @@ def read_root():
 app.include_router(users.router)
 app.include_router(trains.router)
 app.include_router(predicts.router)
+app.include_router(dashboards.router)

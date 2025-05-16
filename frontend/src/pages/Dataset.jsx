@@ -26,12 +26,15 @@ const Dataset = () => {
   };
 
   return (
-  <Box sx={{ maxWidth: 600, mx: "auto", mt: 4, p: 2 }}>
-      <Typography variant="h5" fontWeight="bold" gutterBottom>
+  <Box sx={{ maxWidth: 900, mx: "auto", mt: 4, p: 2 }}>
+       <Typography variant="h4" fontWeight="bold" gutterBottom>
         Dataset Upload
       </Typography>
 
       <Stack spacing={2}>
+        <Typography variant="h6" gutterBottom>
+          Upload Files for Training Model
+        </Typography>
         <input
           type="file"
           accept=".csv"

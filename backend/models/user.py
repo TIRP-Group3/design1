@@ -15,3 +15,4 @@ class User(Base):
     role = relationship("Role", back_populates="users")  # Establishes relationship
 
     predictions = relationship("PredictionHistory", back_populates="user", cascade="all, delete-orphan")
+    scan_sessions = relationship("ScanSession", back_populates="user", cascade="all, delete")

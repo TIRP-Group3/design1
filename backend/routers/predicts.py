@@ -1,7 +1,7 @@
 import json
 import joblib
 import pandas as pd
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
+from fastapi import APIRouter, File, UploadFile, Depends
 import os
 from typing import List
 from sqlalchemy.orm import Session
@@ -9,6 +9,8 @@ from database import SessionLocal
 from routers.users import get_current_user
 from models.predict import PredictionHistory
 from models.user import User
+from models.predict import ScanSession  # new import
+
 model = joblib.load("saved_models/hybrid_model.pkl")
 encoders = joblib.load("saved_models/encoders.pkl")
 
@@ -21,13 +23,10 @@ def get_db() -> Session:
     finally:
         db.close()
 
-
 def extract_features_from_file(file_bytes: bytes, filename: str) -> dict:
-    # Placeholder for actual feature extraction
     return {
         "file_size": len(file_bytes),
         "extension": os.path.splitext(filename)[1].lower().replace('.', ''),
-        # Add more realistic features here
     }
 
 @router.post("/predict-file")
@@ -37,6 +36,12 @@ async def predict_file(
     current_user: User = Depends(get_current_user)
 ):
     results = []
+
+    # Create a scan session
+    scan_session = ScanSession(user_id=current_user.id)
+    db.add(scan_session)
+    db.commit()
+    db.refresh(scan_session)
 
     for file in files:
         contents = await file.read()
@@ -65,7 +70,8 @@ async def predict_file(
                 filename=file.filename,
                 prediction=label,
                 probabilities=json.dumps(probability_dict),
-                user_id=current_user.id
+                user_id=current_user.id,
+                session_id=scan_session.id  # link to session
             )
             db.add(history_entry)
             db.commit()
@@ -82,16 +88,21 @@ async def predict_file(
                 "error": f"Prediction failed: {str(e)}"
             })
 
-    return {"results": results}
+    return {"session_id": scan_session.id, "results": results}
 
 @router.get("/prediction-history")
 def get_user_predictions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    records = db.query(PredictionHistory).filter(PredictionHistory.user_id == current_user.id).all()
+    # Admins see all, others see only their own
+    if current_user.role.name.lower() == "admin":
+        records = db.query(PredictionHistory).order_by(PredictionHistory.scanned_at.desc()).all()
+    else:
+        records = db.query(PredictionHistory).filter(
+            PredictionHistory.user_id == current_user.id
+        ).order_by(PredictionHistory.scanned_at.desc()).all()
 
-    # Convert SQLAlchemy objects to dicts and parse probabilities string
     results = []
     for r in records:
         record_dict = {
@@ -100,9 +111,69 @@ def get_user_predictions(
             "prediction": r.prediction,
             "scanned_at": r.scanned_at.isoformat() if r.scanned_at else None,
             "user_id": r.user_id,
-            # parse probabilities JSON string into dict
+            "user": {
+                "id": r.user.id if r.user else None,
+                "username": r.user.username if r.user else "Unknown"
+            },
+            "session_id": r.session_id,
             "probabilities": json.loads(r.probabilities) if isinstance(r.probabilities, str) else r.probabilities,
         }
         results.append(record_dict)
 
     return results
+
+@router.get("/prediction-sessions")
+def get_user_prediction_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    sessions = db.query(ScanSession).filter(ScanSession.user_id == current_user.id).order_by(ScanSession.scanned_at.desc()).all()
+    data = []
+    for session in sessions:
+        data.append({
+            "session_id": session.id,
+            "scanned_at": session.scanned_at.isoformat(),
+            "file_count": len(session.predictions),
+            "files": [
+                {
+                    "filename": p.filename,
+                    "prediction": p.prediction,
+                    "probabilities": json.loads(p.probabilities)
+                } for p in session.predictions
+            ]
+        })
+    return data
+
+@router.get("/scan-session/{session_id}")
+def get_scan_session_details(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    session = db.query(ScanSession).filter(
+        ScanSession.id == session_id,
+        ScanSession.user_id == current_user.id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Scan session not found.")
+
+    return {
+        "session_id": session.id,
+        "scanned_at": session.scanned_at.isoformat(),
+        "user": {
+            "id": session.user.id,
+            "username": session.user.username,
+            "email": session.user.email
+        } if session.user else None,
+        "files": [
+            {
+                "id": p.id,
+                "filename": p.filename,
+                "prediction": p.prediction,
+                "probabilities": json.loads(p.probabilities),
+                "scanned_at": p.scanned_at.isoformat() if p.scanned_at else None
+            }
+            for p in session.predictions
+        ]
+    }
