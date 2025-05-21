@@ -4,7 +4,7 @@ from passlib.context import CryptContext
 
 SECRET_KEY = "malware_secret_key"  
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # Token expiration time
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # Token expiration time
 
 # Initialize password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

@@ -1,18 +1,17 @@
 import json
 import joblib
 import pandas as pd
-from fastapi import APIRouter, File, UploadFile, Depends
+from fastapi import APIRouter, File, UploadFile, Depends, HTTPException
 import os
-from typing import List
+import io
 from sqlalchemy.orm import Session
+from typing import List
+
 from database import SessionLocal
 from routers.users import get_current_user
-from models.predict import PredictionHistory
+from models.predict import PredictionHistory, ScanSession
 from models.user import User
-from models.predict import ScanSession  # new import
-
 from models.train import TrainingSession
-
 
 router = APIRouter(prefix="/datasets", tags=["Datasets"])
 
@@ -23,83 +22,103 @@ def get_db() -> Session:
     finally:
         db.close()
 
-def extract_features_from_file(file_bytes: bytes, filename: str) -> dict:
-    return {
-        "file_size": len(file_bytes),
-        "extension": os.path.splitext(filename)[1].lower().replace('.', ''),
-    }
 
 @router.post("/predict-file")
 async def predict_file(
-    files: List[UploadFile] = File(...),
+    file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Get the latest training session
-    latest = db.query(TrainingSession).order_by(TrainingSession.uploaded_at.desc()).first()
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are supported.")
 
+    # Load model and encoders
+    latest = db.query(TrainingSession).order_by(TrainingSession.uploaded_at.desc()).first()
     if not latest:
         raise HTTPException(status_code=404, detail="No trained model found.")
 
-    model = joblib.load(latest.model_path)
-    encoder_path = latest.model_path.replace("model_", "encoder_")
-    encoders = joblib.load(encoder_path)
+    try:
+        model = joblib.load(latest.model_path)
+        encoder_path = latest.model_path.replace("model_", "encoder_")
+        encoders = joblib.load(encoder_path)
+        target_encoder = encoders["target"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Model or encoder loading failed: {e}")
 
+    # Read CSV
+    try:
+        contents = await file.read()
+        df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
+        if 'target' in df.columns:
+            df = df.drop(columns=['target'])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read CSV file: {e}")
 
-    results = []
+    # Drop high-cardinality or unstable fields
+    cols_to_drop = ['File_Name', 'File_Path', 'Last_Modified_By']
+    df = df.drop(columns=[col for col in cols_to_drop if col in df.columns], errors='ignore')
 
-    # Create a scan session
+    # Fill missing values with a safe string
+    df = df.fillna("unknown")
+
+    # Apply encoders
+    try:
+        for col, encoder in encoders.items():
+            if col == 'target':
+                continue
+            if col in df.columns:
+                # Replace unseen values with "unknown" if "unknown" exists in encoder classes
+                if "unknown" in encoder.classes_:
+                    df[col] = df[col].apply(lambda x: x if x in encoder.classes_ else "unknown")
+                df[col] = encoder.transform(df[col].astype(str))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to apply encoders: {e}")
+
+    # Predict
+    try:
+        predictions = model.predict(df)
+        probabilities = model.predict_proba(df)
+        labels = target_encoder.inverse_transform(predictions)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
+
+    # Create scan session
     scan_session = ScanSession(user_id=current_user.id)
     db.add(scan_session)
     db.commit()
     db.refresh(scan_session)
 
-    for file in files:
-        contents = await file.read()
-        try:
-            features = extract_features_from_file(contents, file.filename)
-            df = pd.DataFrame([features])
+    # Prepare results
+    results = []
+    for idx in range(len(df)):
+        prob_dict = {
+            target_encoder.inverse_transform([i])[0]: float(prob)
+            for i, prob in enumerate(probabilities[idx])
+        }
 
-            for col, encoder in encoders.items():
-                if col == 'target':
-                    continue
-                if col in df.columns:
-                    df[col] = encoder.transform(df[col].astype(str))
+        history_entry = PredictionHistory(
+            filename=file.filename,
+            prediction=labels[idx],
+            probabilities=json.dumps(prob_dict),
+            user_id=current_user.id,
+            session_id=scan_session.id
+        )
+        db.add(history_entry)
+        db.commit()
 
-            probs = model.predict_proba(df)[0]
-            pred = model.predict(df)[0]
-            target_encoder = encoders['target']
-            label = target_encoder.inverse_transform([pred])[0]
+        results.append({
+            "index": idx,
+            "filename": file.filename,
+            "prediction": labels[idx],
+            "probabilities": prob_dict
+        })
 
-            probability_dict = {
-                target_encoder.inverse_transform([i])[0]: float(prob)
-                for i, prob in enumerate(probs)
-            }
+    return {
+        "session_id": scan_session.id,
+        "filename": file.filename,
+        "results": results
+    }
 
-            # Save to DB
-            history_entry = PredictionHistory(
-                filename=file.filename,
-                prediction=label,
-                probabilities=json.dumps(probability_dict),
-                user_id=current_user.id,
-                session_id=scan_session.id  # link to session
-            )
-            db.add(history_entry)
-            db.commit()
-
-            results.append({
-                "filename": file.filename,
-                "prediction": label,
-                "probabilities": probability_dict
-            })
-
-        except Exception as e:
-            results.append({
-                "filename": file.filename,
-                "error": f"Prediction failed: {str(e)}"
-            })
-
-    return {"session_id": scan_session.id, "results": results}
 
 @router.get("/prediction-history")
 def get_user_predictions(
@@ -145,6 +164,11 @@ def get_user_prediction_sessions(
             "session_id": session.id,
             "scanned_at": session.scanned_at.isoformat(),
             "file_count": len(session.predictions),
+            "user": {
+                "id": session.user.id,
+                "username": session.user.username,
+                "email": session.user.email
+            },
             "files": [
                 {
                     "filename": p.filename,
@@ -168,6 +192,137 @@ def get_scan_session_details(
 
     if not session:
         raise HTTPException(status_code=404, detail="Scan session not found.")
+
+    return {
+        "session_id": session.id,
+        "scanned_at": session.scanned_at.isoformat(),
+        "user": {
+            "id": session.user.id,
+            "username": session.user.username,
+            "email": session.user.email
+        } if session.user else None,
+        "files": [
+            {
+                "id": p.id,
+                "filename": p.filename,
+                "prediction": p.prediction,
+                "probabilities": json.loads(p.probabilities),
+                "scanned_at": p.scanned_at.isoformat() if p.scanned_at else None
+            }
+            for p in session.predictions
+        ]
+    }
+
+@router.post("/predict-file-public")
+async def predict_file_public(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    GUEST_USER_ID = 3  # 🔐 Change this if your guest user ID differs
+
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are supported.")
+
+    # Load model and encoders
+    latest = db.query(TrainingSession).order_by(TrainingSession.uploaded_at.desc()).first()
+    if not latest:
+        raise HTTPException(status_code=404, detail="No trained model found.")
+
+    try:
+        model = joblib.load(latest.model_path)
+        encoder_path = latest.model_path.replace("model_", "encoder_")
+        encoders = joblib.load(encoder_path)
+        target_encoder = encoders["target"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Model or encoder loading failed: {e}")
+
+    # Read CSV
+    try:
+        contents = await file.read()
+        df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
+        if 'target' in df.columns:
+            df = df.drop(columns=['target'])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read CSV file: {e}")
+
+    # Drop high-cardinality or unstable fields
+    cols_to_drop = ['File_Name', 'File_Path', 'Last_Modified_By']
+    df = df.drop(columns=[col for col in cols_to_drop if col in df.columns], errors='ignore')
+
+    # Fill missing values with a safe string
+    df = df.fillna("unknown")
+
+    # Apply encoders
+    try:
+        for col, encoder in encoders.items():
+            if col == 'target':
+                continue
+            if col in df.columns:
+                if "unknown" in encoder.classes_:
+                    df[col] = df[col].apply(lambda x: x if x in encoder.classes_ else "unknown")
+                df[col] = encoder.transform(df[col].astype(str))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to apply encoders: {e}")
+
+    # Predict
+    try:
+        predictions = model.predict(df)
+        probabilities = model.predict_proba(df)
+        labels = target_encoder.inverse_transform(predictions)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
+
+    # Create scan session for GUEST user
+    scan_session = ScanSession(user_id=GUEST_USER_ID)
+    db.add(scan_session)
+    db.commit()
+    db.refresh(scan_session)
+
+    # Save predictions and prepare results
+    results = []
+    for idx in range(len(df)):
+        prob_dict = {
+            target_encoder.inverse_transform([i])[0]: float(prob)
+            for i, prob in enumerate(probabilities[idx])
+        }
+
+        history_entry = PredictionHistory(
+            filename=file.filename,
+            prediction=labels[idx],
+            probabilities=json.dumps(prob_dict),
+            user_id=GUEST_USER_ID,
+            session_id=scan_session.id
+        )
+        db.add(history_entry)
+        db.commit()
+
+        results.append({
+            "index": idx,
+            "filename": file.filename,
+            "prediction": labels[idx],
+            "probabilities": prob_dict
+        })
+
+    return {
+        "session_id": scan_session.id,
+        "filename": file.filename,
+        "results": results
+    }
+
+@router.get("/scan-session-public/{session_id}")
+def get_scan_session_public(
+    session_id: int,
+    db: Session = Depends(get_db)
+):
+    GUEST_USER_ID = 3  # ID of the guest/public user account
+
+    session = db.query(ScanSession).filter(
+        ScanSession.id == session_id,
+        ScanSession.user_id == GUEST_USER_ID
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Public scan session not found.")
 
     return {
         "session_id": session.id,

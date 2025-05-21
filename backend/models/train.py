@@ -15,45 +15,69 @@ def train_model(df: pd.DataFrame, model_filename: str, encoder_filename: str):
     if 'target' not in df.columns:
         raise ValueError("CSV must contain a 'target' column.")
 
+    # Drop high-cardinality or non-informative fields
+    cols_to_drop = ['File_Name', 'File_Path', 'Last_Modified_By']
+    df = df.drop(columns=[col for col in cols_to_drop if col in df.columns], errors='ignore')
+
+    # Fill all missing values with "unknown"
+    df = df.fillna("unknown")
+
+    # Split features and target
     X = df.drop('target', axis=1)
-    y = df['target']
-    
-    # Encoding categorical columns
+    y = df['target'].astype(str)
+
     label_encoders = {}
-    for col in X.select_dtypes(include=['object']):
+
+    # Encode all object (categorical) columns in X
+    for col in X.select_dtypes(include='object'):
         le = LabelEncoder()
-        X[col] = le.fit_transform(X[col])
+        X[col] = X[col].astype(str).fillna("unknown")
+
+        # Ensure 'unknown' is in encoder classes
+        unique_vals = X[col].unique().tolist()
+        if "unknown" not in unique_vals:
+            unique_vals.append("unknown")
+        le.fit(unique_vals)
+
+        X[col] = le.transform(X[col])
         label_encoders[col] = le
-    
+
+    # Encode target
     le_target = LabelEncoder()
-    y = le_target.fit_transform(y)
+    le_target.fit(y)
+    y = le_target.transform(y)
     label_encoders['target'] = le_target
 
-    # Splitting data into train and test (80% train, 20% test)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Train-test split
+    from sklearn.model_selection import train_test_split
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
 
-    # RandomForestClassifier and SVM
+    # Define models
+    from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+    from sklearn.svm import SVC
+
     rf = RandomForestClassifier(n_estimators=100, random_state=42)
     svm = SVC(probability=True, random_state=42)
-
-    # Hybrid ensemble model using soft voting
     hybrid = VotingClassifier(estimators=[('rf', rf), ('svm', svm)], voting='soft')
 
-    # Training the model
+    # Train model
     hybrid.fit(X_train, y_train)
 
-    # Predicting on the test data
+    # Evaluate
+    from sklearn.metrics import accuracy_score
     y_pred = hybrid.predict(X_test)
-
-    # Calculating accuracy
     accuracy = accuracy_score(y_test, y_pred)
 
-    # Saving model and label encoders
+    # Save model and encoders
+    import os
+    import joblib
     os.makedirs("saved_models", exist_ok=True)
     joblib.dump(hybrid, f"saved_models/{model_filename}")
     joblib.dump(label_encoders, f"saved_models/{encoder_filename}")
 
-    return accuracy * 100  # Returning accuracy as percentage
+    return accuracy * 100  # Return accuracy in percent
 
 class TrainingSession(Base):
     __tablename__ = "training_sessions"

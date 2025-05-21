@@ -22,34 +22,53 @@ import PieChartWithLegend from "../components/PieChartWithLegend";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
-const RISK_COLOR_MAP = {
-  High: "#FF4500",
-  Medium: "#FF8C00",
-  Low: "#FFD700"
+// ✅ Severity color map
+export const RISK_COLOR_MAP = {
+  High: "#FFCDD2",    // light pink
+  Medium: "#FFE082",  // soft orange
+  None: "#E0E0E0"     // neutral grey
 };
 
-const THREAT_COLOR_MAP = {
-  trojan: "#3f51b5",
-  adware: "#2196f3",
-  spyware: "#9c27b0",
-  ransomware: "#4caf50",
-  default: "#90a4ae"
+// ✅ Threat type color map
+export const THREAT_COLOR_MAP = {
+  trojan: "#B71C1C",       // red
+  ransomware: "#D84315",   // dark orange
+  worm: "#FF6F00",         // bright orange
+  virus: "#C62828",        // red-orange
+  benign: "#9E9E9E",       // grey
+  default: "#90A4AE"
 };
 
-const getSeverity = (prediction) => {
-  const type = prediction.toLowerCase();
-  if (["ransomware", "trojan", "worm"].includes(type)) return "High";
-  if (["spyware", "keylogger"].includes(type)) return "Medium";
-  if (["adware", "pup", "tracking"].includes(type)) return "Low";
+// ✅ Severity logic
+export const getSeverity = (prediction) => {
+  const type = prediction?.toLowerCase();
+  if (["trojan", "ransomware", "worm"].includes(type)) return "High";
+  if (["virus"].includes(type)) return "Medium";
+  if (["benign"].includes(type)) return "None";
   return "None";
 };
 
-const getRecommendation = (prediction) => {
-  const type = prediction.toLowerCase();
-  if (["ransomware", "trojan"].includes(type)) return "Immediate quarantine and deep scan";
-  if (["spyware", "keylogger"].includes(type)) return "Quarantine and change passwords";
-  if (["adware", "pup"].includes(type)) return "Remove with anti-adware tool";
-  return "No action needed";
+// ✅ Recommendation logic
+export const getRecommendation = (prediction) => {
+  const type = prediction?.toLowerCase();
+
+  if (["trojan", "ransomware"].includes(type)) {
+    return "⚠️ Immediate quarantine and full system scan";
+  }
+
+  if (["worm"].includes(type)) {
+    return "⚠️ Isolate device from network and scan";
+  }
+
+  if (["virus"].includes(type)) {
+    return "🛡️ Scan and monitor system for abnormalities";
+  }
+
+  if (["benign"].includes(type)) {
+    return "✅ No action needed";
+  }
+
+  return "ℹ️ Unknown prediction – review manually";
 };
 
 export default function ScanReport() {
@@ -102,17 +121,24 @@ export default function ScanReport() {
     document.body.removeChild(link);
   };
 
-  if (loading) return <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}><CircularProgress /></Box>;
-  if (!session) return <Typography>Error loading report</Typography>;
+  if (loading) {
+    return <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}><CircularProgress /></Box>;
+  }
+
+  if (!session) {
+    return <Typography>Error loading report</Typography>;
+  }
 
   const files = session.files;
-  const riskCounts = { Low: 0, Medium: 0, High: 0 };
+
+  const riskCounts = { High: 0, Medium: 0, None: 0 };
   const threatCounts = {};
 
   files.forEach((f) => {
     const severity = getSeverity(f.prediction);
     riskCounts[severity]++;
-    threatCounts[f.prediction] = (threatCounts[f.prediction] || 0) + 1;
+    const threat = f.prediction.toLowerCase();
+    threatCounts[threat] = (threatCounts[threat] || 0) + 1;
   });
 
   const riskChartData = Object.entries(riskCounts).map(([name, value]) => ({
@@ -124,7 +150,7 @@ export default function ScanReport() {
   const typeChartData = Object.entries(threatCounts).map(([name, value]) => ({
     name,
     value,
-    color: THREAT_COLOR_MAP[name.toLowerCase()] || THREAT_COLOR_MAP.default
+    color: THREAT_COLOR_MAP[name] || THREAT_COLOR_MAP.default
   }));
 
   return (
@@ -179,10 +205,11 @@ export default function ScanReport() {
                 const severity = getSeverity(file.prediction);
                 const predColor = THREAT_COLOR_MAP[file.prediction.toLowerCase()] || THREAT_COLOR_MAP.default;
                 const probabilityText = file.probabilities
-                ? Object.entries(file.probabilities)
-                    .map(([label, prob]) => `${label}: ${(prob * 100).toFixed(1)}%`)
-                    .join(" | ")
-                : "N/A";
+                  ? Object.entries(file.probabilities)
+                      .map(([label, prob]) => `${label}: ${(prob * 100).toFixed(1)}%`)
+                      .join(" | ")
+                  : "N/A";
+
                 return (
                   <TableRow key={idx}>
                     <TableCell>{idx + 1}</TableCell>
@@ -190,15 +217,22 @@ export default function ScanReport() {
                     <TableCell>
                       <Chip
                         label={file.prediction}
-                        sx={{ backgroundColor: predColor, color: "#fff !important", fontWeight: "bold" }}
+                        sx={{
+                          backgroundColor: predColor,
+                          color: predColor === "#9E9E9E" ? "#000" : "#fff",
+                          fontWeight: "bold"
+                        }}
                       />
                     </TableCell>
-
                     <TableCell>{probabilityText}</TableCell>
                     <TableCell>
                       <Chip
                         label={severity}
-                        sx={{ backgroundColor: RISK_COLOR_MAP[severity] || "#ccc", color: "#000 !important", fontWeight: 500 }}
+                        sx={{
+                          backgroundColor: RISK_COLOR_MAP[severity] || "#ccc",
+                          color: "#000",
+                          fontWeight: 500
+                        }}
                       />
                     </TableCell>
                     <TableCell>{getRecommendation(file.prediction)}</TableCell>

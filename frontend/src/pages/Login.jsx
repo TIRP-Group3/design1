@@ -38,7 +38,9 @@ function Login() {
           Welcome Back
         </Typography>
         <Typography variant="subtitle1" gutterBottom align="center">
-          Please log in to continue
+          Please log in to continue or         <Button component={Link} to="/public-scan">
+        Try Malware Scan Without Account
+      </Button>
         </Typography>
         <form onSubmit={handleLogin}>
           <TextField
@@ -70,6 +72,8 @@ function Login() {
         <Typography variant="body2" align="center" sx={{ mt: 2 }}>
           Don't have an account? <Link to="/register">Register here</Link>
         </Typography>
+
+
       </Paper>
     </Box>
   );

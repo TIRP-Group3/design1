@@ -8,9 +8,8 @@ from routers import predicts
 from database import Base, engine
 
 app = FastAPI()
-origins = [
-    "http://localhost:5173",
-]
+origins = ["*"]  # Allow all origins (NOT recommended for production)
+
 
 app.add_middleware(
     CORSMiddleware,

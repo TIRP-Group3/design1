@@ -26,7 +26,9 @@ function Register() {
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" bgcolor="#f5f5f5">
       <Paper elevation={3} sx={{ padding: 4, width: 400 }}>
         <Typography variant="h4" gutterBottom align="center">
-          Create an Account
+          Create an Account or    <Button component={Link} to="/public-scan">
+          Try Malware Scan Without Account
+        </Button>
         </Typography>
         <Typography variant="subtitle1" gutterBottom align="center">
           Register below to get started
@@ -66,6 +68,7 @@ function Register() {
         <Typography variant="body2" align="center" sx={{ mt: 2 }}>
           Already have an account? <Link to="/login">Login here</Link>
         </Typography>
+     
       </Paper>
     </Box>
   );

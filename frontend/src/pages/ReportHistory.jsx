@@ -12,7 +12,6 @@ import {
   TableRow,
   TableCell,
   TableBody,
-  Chip,
   Button,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
@@ -21,7 +20,7 @@ import { useAuthStore } from "../store/useAuthStore";
 export default function ReportHistory() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const [history, setHistory] = useState(null);
+  const [sessions, setSessions] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,13 +29,13 @@ export default function ReportHistory() {
       navigate("/");
       return;
     }
-    api.get("/datasets/prediction-history")
-      .then((res) => setHistory(res.data))
+    api.get("/datasets/prediction-sessions")
+      .then((res) => setSessions(res.data))
       .catch((err) => console.error(err))
       .finally(() => setLoading(false));
   }, [user, navigate]);
 
-  if (!user || loading || !history) {
+  if (!user || loading || !sessions) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
         <CircularProgress />
@@ -47,7 +46,7 @@ export default function ReportHistory() {
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
-        All Report History
+        All Scan Sessions
       </Typography>
 
       <TableContainer component={Paper}>
@@ -55,30 +54,26 @@ export default function ReportHistory() {
           <TableHead>
             <TableRow>
               <TableCell><strong>#</strong></TableCell>
-              <TableCell><strong>Filename</strong></TableCell>
-              <TableCell><strong>Prediction</strong></TableCell>
+              <TableCell><strong>Session ID</strong></TableCell>
+              <TableCell><strong>Scanned By</strong></TableCell>
+              <TableCell><strong>File Count</strong></TableCell>
               <TableCell><strong>Scanned At</strong></TableCell>
-              <TableCell><strong>User</strong></TableCell>
-              <TableCell><strong>Session</strong></TableCell>
               <TableCell><strong>Action</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {history.map((entry, idx) => (
-              <TableRow key={entry.id}>
+            {sessions.map((s, idx) => (
+              <TableRow key={s.session_id}>
                 <TableCell>{idx + 1}</TableCell>
-                <TableCell>{entry.filename}</TableCell>
-                <TableCell>
-                  <Chip label={entry.prediction} size="small" color="primary" />
-                </TableCell>
-                <TableCell>{new Date(entry.scanned_at).toLocaleString()}</TableCell>
-                <TableCell>{entry.user?.username || "-"}</TableCell>
-                <TableCell>#{entry.session_id}</TableCell>
+                <TableCell>#{s.session_id}</TableCell>
+                <TableCell>{s.user?.username || "Unknown"}</TableCell>
+                <TableCell>{s.file_count}</TableCell>
+                <TableCell>{new Date(s.scanned_at).toLocaleString()}</TableCell>
                 <TableCell>
                   <Button
                     size="small"
                     variant="outlined"
-                    onClick={() => navigate(`/report/${entry.session_id}`)}
+                    onClick={() => navigate(`/report/${s.session_id}`)}
                   >
                     View Report
                   </Button>
