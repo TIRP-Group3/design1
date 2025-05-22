@@ -1,7 +1,7 @@
 import json
 import joblib
 import pandas as pd
-from fastapi import APIRouter, File, UploadFile, Depends, HTTPException
+from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, Form
 import os
 import io
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ def get_db() -> Session:
 
 @router.post("/predict-file")
 async def predict_file(
+    model_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -33,7 +34,7 @@ async def predict_file(
         raise HTTPException(status_code=400, detail="Only CSV files are supported.")
 
     # Load model and encoders
-    latest = db.query(TrainingSession).order_by(TrainingSession.uploaded_at.desc()).first()
+    latest = db.query(TrainingSession).filter(TrainingSession.id == model_id).first()
     if not latest:
         raise HTTPException(status_code=404, detail="No trained model found.")
 
@@ -215,6 +216,7 @@ def get_scan_session_details(
 
 @router.post("/predict-file-public")
 async def predict_file_public(
+    model_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -224,7 +226,7 @@ async def predict_file_public(
         raise HTTPException(status_code=400, detail="Only CSV files are supported.")
 
     # Load model and encoders
-    latest = db.query(TrainingSession).order_by(TrainingSession.uploaded_at.desc()).first()
+    latest = db.query(TrainingSession).filter(TrainingSession.id == model_id).first()
     if not latest:
         raise HTTPException(status_code=404, detail="No trained model found.")
 

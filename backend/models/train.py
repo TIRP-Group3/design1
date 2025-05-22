@@ -90,3 +90,4 @@ class TrainingSession(Base):
     uploaded_by = Column(Integer, ForeignKey("users.id"))
     
     user = relationship("User", back_populates="training_sessions")
+

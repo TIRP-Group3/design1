@@ -15,20 +15,25 @@ export default function FilePredictor() {
 
   const navigate = useNavigate(); 
 
-  const handleFileUpload = async (files) => {
-    const file = files[0];
+  const handleFileUpload = async (file,modelId) => {
+    
     if (!file || file.type !== "text/csv") {
       alert("Please upload a valid CSV file.");
       return;
     }
 
-    setLoading(true);
-    setResults([]);
+    if (!modelId) {
+      alert("Please select a model.");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("model_id", modelId);
 
     try {
+      
+      setLoading(true);
       const response = await api.post("/datasets/predict-file-public", formData, {
         headers: {
           "Content-Type": "multipart/form-data",

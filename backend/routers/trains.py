@@ -85,3 +85,15 @@ def list_training_sessions(
         })
 
     return results
+
+@router.get("/trained-models")
+def get_trained_models(db: Session = Depends(get_db)):
+    models = db.query(TrainingSession).order_by(TrainingSession.uploaded_at.desc()).all()
+    return [
+        {
+            "id": m.id,
+            "version": f"Model V{m.id}",  # Add version format here
+            "model_path": m.model_path,
+        }
+        for m in models
+    ]
